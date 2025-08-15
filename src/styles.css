@@ -1,37 +1,78 @@
-* { box-sizing: border-box; }
-body { margin:0; font-family: system-ui, sans-serif; background:#0b0f14; color:#e6edf3; }
-a { color: inherit; text-decoration: none; }
-.container { padding: 16px; }
-input, button, select { padding:10px; border-radius:8px; border:1px solid #2d3748; background:#121821; color:#e6edf3; }
-button { cursor:pointer; }
-
-nav.bottom {
-  position: fixed; bottom:0; left:0; right:0; display:flex; gap:8px;
-  background:#0f141b; border-top:1px solid #1f2937; padding:8px; justify-content:space-around;
+/* Тема */
+:root{
+  --bg:#072937;           /* тюркоазено тъмно синьо */
+  --card:#0c3346;
+  --card-border:#134155;
+  --text:#e6edf3;
+  --muted:#9fb8c7;
+  --accent:#19a7a7;
 }
-nav.bottom a { padding:8px 12px; border-radius:10px; background:#131a23; }
 
-.card { background:#0f141b; border:1px solid #1f2937; border-radius:12px; padding:16px; margin:12px 0; }
-h1,h2,h3 { margin: 10px 0; }
+*{ box-sizing:border-box; }
+body{ margin:0; font-family:system-ui, sans-serif; background:var(--bg); color:var(--text); }
+a{ color:inherit; text-decoration:none; }
+.container{ padding:16px; }
 
-/* Височина на картата — синхронизирана с навигацията (56px) */
-.leaflet-container { width:100%; height: calc(100vh - 56px); }
-
-.badge { display:inline-block; padding:2px 8px; border-radius:999px; background:#1f2937; margin-left:8px; }
-.form-row { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0; }
-.table { width:100%; border-collapse: collapse; }
-.table th, .table td { border:1px solid #1f2937; padding:6px; font-size:14px; }
-
-.alert { background:#111827; border:1px solid #374151; padding:12px; border-radius:8px; }
-.success { border-color:#10b981; }
-.error { border-color:#ef4444; }
-
-/* (по избор – ако искаш плаващи бутони върху картата) */
-.map-controls{
-  position:absolute; top:10px; left:10px; z-index:1000;
-  display:flex; gap:8px;
+/* Полета и бутони */
+input,button,select{
+  width:100%;
+  padding:12px 14px;
+  border-radius:12px;
+  border:1px solid var(--card-border);
+  background:var(--card);
+  color:var(--text);
 }
-.map-controls button{
-  background:#111827; border:1px solid #374151; color:#e6edf3;
-  padding:8px 10px; border-radius:10px;
+button{ cursor:pointer; }
+button.primary{ background:var(--accent); color:#08252e; border:none; }
+button.link{ background:transparent; border:none; color:var(--muted); text-decoration:underline; }
+
+/* Карти/картички */
+.card{
+  background:var(--card);
+  border:1px solid var(--card-border);
+  border-radius:16px;
+  padding:16px;
+  margin:12px 0;
 }
+
+/* Плочки (еднакви размери) */
+.tiles{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.tile{
+  display:flex; align-items:center; justify-content:center; text-align:center;
+  height:140px; border-radius:16px; background:var(--card);
+  border:1px solid var(--card-border); font-size:24px; font-weight:700;
+}
+.tile.locked{ position:relative; color:var(--muted); }
+.tile.locked::after{
+  content:"?"; position:absolute; font-size:56px; line-height:1; opacity:.35;
+}
+
+/* Заглавия */
+h1,h2,h3{ margin:10px 0; }
+
+/* Карта */
+.leaflet-container{ width:100%; height:calc(100vh - 56px); }
+
+/* Алерти */
+.alert{ background:#0e3c53; border:1px solid var(--card-border); padding:12px; border-radius:12px; }
+.alert.error{ border-color:#ef4444; }
+
+/* Плаващи бутони върху карта/скенер */
+.overlay-menu{
+  position:fixed; left:12px; bottom:12px; z-index:1000;
+}
+.overlay-menu button{
+  width:auto; padding:8px 12px; border-radius:12px;
+}
+
+/* Навигация в дъното (ако ти трябва) */
+nav.bottom{
+  position:fixed; bottom:0; left:0; right:0; display:flex; gap:8px;
+  background:#0a2f40; border-top:1px solid var(--card-border); padding:8px; justify-content:space-around;
+}
+nav.bottom a{ padding:8px 12px; border-radius:10px; background:#0d364a; }
+
+.badge{ display:inline-block; padding:2px 8px; border-radius:999px; background:#0d364a; margin-left:8px; }
+.form-row{ display:flex; gap:8px; flex-wrap:wrap; margin:6px 0; }
+.table{ width:100%; border-collapse:collapse; }
+.table th,.table td{ border:1px solid var(--card-border); padding:6px; font-size:14px; }
