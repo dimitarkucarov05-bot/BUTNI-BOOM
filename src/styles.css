@@ -1,22 +1,37 @@
-
 * { box-sizing: border-box; }
 body { margin:0; font-family: system-ui, sans-serif; background:#0b0f14; color:#e6edf3; }
 a { color: inherit; text-decoration: none; }
 .container { padding: 16px; }
 input, button, select { padding:10px; border-radius:8px; border:1px solid #2d3748; background:#121821; color:#e6edf3; }
 button { cursor:pointer; }
+
 nav.bottom {
   position: fixed; bottom:0; left:0; right:0; display:flex; gap:8px;
   background:#0f141b; border-top:1px solid #1f2937; padding:8px; justify-content:space-around;
 }
 nav.bottom a { padding:8px 12px; border-radius:10px; background:#131a23; }
+
 .card { background:#0f141b; border:1px solid #1f2937; border-radius:12px; padding:16px; margin:12px 0; }
 h1,h2,h3 { margin: 10px 0; }
-.leaflet-container { width:100%; height: calc(100vh - 64px); }
+
+/* Височина на картата — синхронизирана с навигацията (56px) */
+.leaflet-container { width:100%; height: calc(100vh - 56px); }
+
 .badge { display:inline-block; padding:2px 8px; border-radius:999px; background:#1f2937; margin-left:8px; }
 .form-row { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0; }
 .table { width:100%; border-collapse: collapse; }
 .table th, .table td { border:1px solid #1f2937; padding:6px; font-size:14px; }
+
 .alert { background:#111827; border:1px solid #374151; padding:12px; border-radius:8px; }
 .success { border-color:#10b981; }
 .error { border-color:#ef4444; }
+
+/* Плаващи контролни бутони върху картата (напр. „Към мен“) */
+.map-controls{
+  position:absolute; top:10px; left:10px; z-index:1000;
+  display:flex; gap:8px;
+}
+.map-controls button{
+  background:#111827; border:1px solid #374151; color:#e6edf3;
+  padding:8px 10px; border-radius:10px;
+}
