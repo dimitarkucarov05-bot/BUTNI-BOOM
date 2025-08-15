@@ -16,8 +16,10 @@ const markerIcon = new L.Icon({
   iconSize: [25, 41], iconAnchor: [12, 41]
 })
 
-// Център на България
+// Център на България и нива на зуум
 const BG_CENTER: [number, number] = [42.7339, 25.4858]
+const INITIAL_ZOOM = 7          // старт – цяла България
+const TARGET_ZOOM = 16          // „50%“ по твоя замисъл: детайлно улично ниво
 
 export default function MapPage() {
   const [codes, setCodes] = useState<Code[]>([])
@@ -26,10 +28,11 @@ export default function MapPage() {
   const [acc, setAcc] = useState<number>(0)
   const [geoMsg, setGeoMsg] = useState<string>('')
 
-  // еднократно авто-центриране към играча
+  // за еднократно авто-центриране при първата валидна позиция
   const [map, setMap] = useState<L.Map | null>(null)
   const [centeredOnce, setCenteredOnce] = useState(false)
 
+  // тикер за обратните броячи в popups
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(t)
@@ -46,7 +49,7 @@ export default function MapPage() {
     })()
   }, [])
 
-  // Проследяване на МОЯТА позиция (само локално в браузъра)
+  // МОЯТА жива позиция (само локално – не се записва никъде)
   useEffect(() => {
     if (!('geolocation' in navigator)) { setGeoMsg('Устройството няма геолокация.'); return }
     const watchId = navigator.geolocation.watchPosition(
@@ -61,26 +64,19 @@ export default function MapPage() {
     return () => navigator.geolocation.clearWatch(watchId)
   }, [])
 
-  // Центрирай към играча САМО веднъж (при първа валидна позиция)
+  // Центрирай към играча САМО веднъж веднага щом имаме позиция
   useEffect(() => {
     if (map && myPos && !centeredOnce) {
-      map.setView(myPos, 16)
+      map.setView(myPos, TARGET_ZOOM)
       setCenteredOnce(true)
     }
   }, [map, myPos, centeredOnce])
 
-  const centerMe = () => { if (map && myPos) map.setView(myPos, 16) }
-
   return (
     <div style={{ position:'relative' }}>
-      {/* Плаващ бутон върху картата */}
-      <div className="map-controls">
-        <button onClick={centerMe}>Към мен</button>
-      </div>
-
       <MapContainer
         center={BG_CENTER as any}
-        zoom={7}
+        zoom={INITIAL_ZOOM}
         minZoom={6}
         scrollWheelZoom={true}
         style={{height:'calc(100vh - 56px)'}}
@@ -88,13 +84,13 @@ export default function MapPage() {
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-        {/* Маркери на QR кодовете */}
+        {/* Маркери на QR локациите */}
         {codes.map(x=>{
           const active = x.is_active || (!!x.activation_time && dayjs(x.activation_time).isBefore(dayjs()))
           const diff = x.activation_time ? dayjs(x.activation_time).diff(dayjs(now)) : 0
           const d = dayjs.duration(diff)
           return (
-            <Marker key={x.id} position={[x.lat,x.lng]} icon={markerIcon}>
+            <Marker key={x.id} position={[x.lat, x.lng]} icon={markerIcon}>
               <Popup>
                 <div>
                   <b>{x.name}</b><br/>
@@ -110,16 +106,30 @@ export default function MapPage() {
           )
         })}
 
-        {/* МОЯТА движеща се позиция (само за мен, не се праща към сървър) */}
+        {/* МОЯТА движеща се позиция (само за мен) */}
         {myPos && (
           <>
-            <CircleMarker center={myPos} radius={8} pathOptions={{ color:'#2563eb', fillColor:'#3b82f6', fillOpacity:1 }} />
-            {acc > 0 && <Circle center={myPos} radius={acc} pathOptions={{ color:'#60a5fa', fillOpacity:0.1 }} />}
+            <CircleMarker
+              center={myPos}
+              radius={8}
+              pathOptions={{ color:'#2563eb', fillColor:'#3b82f6', fillOpacity:1 }}
+            />
+            {acc > 0 && (
+              <Circle
+                center={myPos}
+                radius={acc}
+                pathOptions={{ color:'#60a5fa', fillOpacity:0.1 }}
+              />
+            )}
           </>
         )}
       </MapContainer>
 
-      {geoMsg && <div className="alert error" style={{position:'absolute',bottom:70,left:10,right:10}}>{geoMsg}</div>}
+      {geoMsg && (
+        <div className="alert error" style={{position:'absolute',bottom:70,left:10,right:10}}>
+          {geoMsg}
+        </div>
+      )}
     </div>
   )
 }
