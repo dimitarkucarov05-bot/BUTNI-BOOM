@@ -26,11 +26,14 @@ export default function MapPage() {
   const [acc, setAcc] = useState<number>(0)
   const [geoMsg, setGeoMsg] = useState<string>('')
 
-  // само за еднократно авто-центриране към играча
+  // еднократно авто-центриране към играча
   const [map, setMap] = useState<L.Map | null>(null)
   const [centeredOnce, setCenteredOnce] = useState(false)
 
-  useEffect(()=>{ const t = setInterval(()=>setNow(new Date()), 1000); return ()=>clearInterval(t) },[])
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(t)
+  }, [])
 
   // Зареждане на QR локациите
   useEffect(() => {
@@ -66,8 +69,15 @@ export default function MapPage() {
     }
   }, [map, myPos, centeredOnce])
 
+  const centerMe = () => { if (map && myPos) map.setView(myPos, 16) }
+
   return (
     <div style={{ position:'relative' }}>
+      {/* Плаващ бутон върху картата */}
+      <div className="map-controls">
+        <button onClick={centerMe}>Към мен</button>
+      </div>
+
       <MapContainer
         center={BG_CENTER as any}
         zoom={7}
@@ -89,8 +99,11 @@ export default function MapPage() {
                 <div>
                   <b>{x.name}</b><br/>
                   {active ? <span className="badge">Активен</span> :
-                    x.activation_time ? <span>Старт след: {d.asMilliseconds()>0?`${d.hours()}ч ${d.minutes()}м ${d.seconds()}с`:'скоро...'}</span> :
-                    <span>Очаква активация</span>}
+                    x.activation_time ? (
+                      <span>Старт след: {d.asMilliseconds()>0 ? `${d.hours()}ч ${d.minutes()}м ${d.seconds()}с` : 'скоро...'}</span>
+                    ) : (
+                      <span>Очаква активация</span>
+                    )}
                 </div>
               </Popup>
             </Marker>
