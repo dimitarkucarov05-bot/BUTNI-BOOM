@@ -26,7 +26,7 @@ h1,h2,h3 { margin: 10px 0; }
 .success { border-color:#10b981; }
 .error { border-color:#ef4444; }
 
-/* Плаващи контролни бутони върху картата (напр. „Към мен“) */
+/* (по избор – ако искаш плаващи бутони върху картата) */
 .map-controls{
   position:absolute; top:10px; left:10px; z-index:1000;
   display:flex; gap:8px;
