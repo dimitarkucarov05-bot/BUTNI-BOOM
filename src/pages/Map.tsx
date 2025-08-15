@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, Circle, CircleMarker } from 'react-leaflet'
+import React, { useEffect, useState } from 'react'
+import { MapContainer, TileLayer, Marker, Popup, CircleMarker } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 import dayjs from 'dayjs'
@@ -16,29 +16,23 @@ const markerIcon = new L.Icon({
   iconSize: [25, 41], iconAnchor: [12, 41]
 })
 
-// България
+// България (резервен център)
 const BG_CENTER: [number, number] = [42.7339, 25.4858]
-const INITIAL_ZOOM = 7
-const TARGET_ZOOM = 16
+const TARGET_ZOOM = 16 // улично ниво
 
 export default function MapPage() {
   const [codes, setCodes] = useState<Code[]>([])
   const [now, setNow] = useState<Date>(new Date())
   const [myPos, setMyPos] = useState<[number, number] | null>(null)
-  const [acc, setAcc] = useState<number>(0)
-  const [geoMsg, setGeoMsg] = useState<string>('')
+  const [geoMsg, setGeoMsg] = useState<string>('Зареждам GPS… позволи достъп до локацията.')
 
-  const [map, setMap] = useState<L.Map | null>(null)
-  const centeredOnceRef = useRef(false)
-  const pendingCenterTimer = useRef<number | null>(null)
-
-  // тикер за обратни броячи
+  // тикер за обратните броячи
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(t)
   }, [])
 
-  // зареждане на QR локации
+  // зареждане на QR локациите
   useEffect(() => {
     (async () => {
       const { data } = await supabase
@@ -49,58 +43,64 @@ export default function MapPage() {
     })()
   }, [])
 
-  // моята жива позиция (локално, не се праща никъде)
+  // вземи позицията → после стартирай картата точно върху мен
   useEffect(() => {
-    if (!('geolocation' in navigator)) { setGeoMsg('Устройството няма геолокация.'); return }
+    if (!('geolocation' in navigator)) {
+      setGeoMsg('Устройството няма геолокация.')
+      return
+    }
 
-    const watchId = navigator.geolocation.watchPosition(
+    // първо – еднократен бърз фикс
+    navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const p: [number, number] = [pos.coords.latitude, pos.coords.longitude]
-        setMyPos(p)
-        setAcc(pos.coords.accuracy || 0)
+        setMyPos([pos.coords.latitude, pos.coords.longitude])
         setGeoMsg('')
+      },
+      (err) => setGeoMsg(err.message || 'Грешка при геолокация.'),
+      { enableHighAccuracy: true, timeout: 15000 }
+    )
 
-        // центрирай веднага при първия валиден фикс
-        if (map && !centeredOnceRef.current) {
-          map.flyTo(p, TARGET_ZOOM, { animate: true })
-          centeredOnceRef.current = true
-        }
+    // после – жива актуализация (без да прецентрираме картата)
+    const id = navigator.geolocation.watchPosition(
+      (pos) => {
+        setMyPos([pos.coords.latitude, pos.coords.longitude])
+        setGeoMsg('')
       },
       (err) => setGeoMsg(err.message || 'Грешка при геолокация.'),
       { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
     )
 
-    return () => navigator.geolocation.clearWatch(watchId)
-  }, [map])
+    return () => navigator.geolocation.clearWatch(id)
+  }, [])
 
-  // резервен център: ако първо дойде позицията, а картата още не е готова
-  useEffect(() => {
-    if (!map || !myPos || centeredOnceRef.current) return
-    // малко изчакване за да е сигурно, че map е финализиран
-    pendingCenterTimer.current = window.setTimeout(() => {
-      if (map && myPos && !centeredOnceRef.current) {
-        map.flyTo(myPos, TARGET_ZOOM, { animate: true })
-        centeredOnceRef.current = true
-      }
-    }, 150)
-    return () => {
-      if (pendingCenterTimer.current) window.clearTimeout(pendingCenterTimer.current)
-    }
-  }, [map, myPos])
+  // 1) Ако още нямаме позиция – покажи инфо, не рендвай картата
+  if (!myPos) {
+    return (
+      <div className="container">
+        <div className="alert">{geoMsg}</div>
+        {/* Пада резервен изглед, ако потребителят отказва локация: */}
+        <div style={{height:'50vh', marginTop:12}}>
+          <MapContainer center={BG_CENTER as any} zoom={7} scrollWheelZoom={false} style={{height:'100%'}}>
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          </MapContainer>
+        </div>
+      </div>
+    )
+  }
 
+  // 2) Когато имаме позиция – рендни картата директно върху мен с zoom 16
   return (
     <div style={{ position:'relative' }}>
       <MapContainer
-        center={BG_CENTER as any}
-        zoom={INITIAL_ZOOM}
+        center={myPos as any}
+        zoom={TARGET_ZOOM}
         minZoom={6}
         scrollWheelZoom={true}
         style={{height:'calc(100vh - 56px)'}}
-        whenCreated={setMap}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-        {/* Маркери на QR локациите */}
+        {/* QR маркери */}
         {codes.map(x=>{
           const active = x.is_active || (!!x.activation_time && dayjs(x.activation_time).isBefore(dayjs()))
           const diff = x.activation_time ? dayjs(x.activation_time).diff(dayjs(now)) : 0
@@ -112,7 +112,7 @@ export default function MapPage() {
                   <b>{x.name}</b><br/>
                   {active ? <span className="badge">Активен</span> :
                     x.activation_time ? (
-                      <span>Старт след: {d.asMilliseconds()>0 ? `${d.hours()}ч ${d.minutes()}м ${d.seconds()}с` : 'скоро...'}</span>
+                      <span>Старт след: {d.asMilliseconds()>0 ? `${d.hours()}ч ${d.minutes()}м ${d.seconds()}с` : 'скоро…'}</span>
                     ) : (
                       <span>Очаква активация</span>
                     )}
@@ -122,30 +122,13 @@ export default function MapPage() {
           )
         })}
 
-        {/* Моята движеща се позиция */}
-        {myPos && (
-          <>
-            <CircleMarker
-              center={myPos}
-              radius={8}
-              pathOptions={{ color:'#2563eb', fillColor:'#3b82f6', fillOpacity:1 }}
-            />
-            {acc > 0 && (
-              <Circle
-                center={myPos}
-                radius={acc}
-                pathOptions={{ color:'#60a5fa', fillOpacity:0.1 }}
-              />
-            )}
-          </>
-        )}
+        {/* Само малкото синьо кръгче – без големия кръг на точността */}
+        <CircleMarker
+          center={myPos}
+          radius={8}
+          pathOptions={{ color:'#2563eb', fillColor:'#3b82f6', fillOpacity:1 }}
+        />
       </MapContainer>
-
-      {geoMsg && (
-        <div className="alert error" style={{position:'absolute',bottom:70,left:10,right:10}}>
-          {geoMsg}
-        </div>
-      )}
     </div>
   )
 }
