@@ -1,34 +1,39 @@
-
-import React, { useEffect, useState } from 'react'
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import React from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import Landing from './pages/Landing'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import Menu from './pages/Menu'
+import Profile from './pages/Profile'
+import MapPage from './pages/Map'
+import Scan from './pages/Scan'
 import { supabase } from './supabase'
 
-export default function App() {
-  const loc = useLocation()
-  const nav = useNavigate()
-  const [user, setUser] = useState<any>(null)
-
-  useEffect(() => {
-    supabase.auth.getUser().then(r => setUser(r.data.user))
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
+function RequireAuth({children}:{children:React.ReactNode}) {
+  const [ready, setReady] = React.useState(false)
+  const [authed, setAuthed] = React.useState(false)
+  React.useEffect(()=>{
+    supabase.auth.getUser().then(r=>{
+      setAuthed(!!r.data.user); setReady(true)
     })
-    return () => sub.subscription.unsubscribe()
-  }, [])
+  },[])
+  if(!ready) return null
+  return authed ? <>{children}</> : <Navigate to="/auth" replace />
+}
 
-  useEffect(() => {
-    if (!user && loc.pathname !== '/auth') nav('/auth')
-  }, [user, loc.pathname])
-
+export default function App(){
   return (
-    <div>
-      <Outlet/>
-
-      <nav className="bottom">
-        <Link to="/">Карта</Link>
-        <Link to="/scan">Сканирай</Link>
-        <Link to="/profile">Профил</Link>
-      </nav>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Landing/>} />
+        <Route path="/auth" element={<Login/>} />
+        <Route path="/register" element={<Register/>} />
+        <Route path="/menu" element={<RequireAuth><Menu/></RequireAuth>} />
+        <Route path="/profile" element={<RequireAuth><Profile/></RequireAuth>} />
+        <Route path="/map" element={<RequireAuth><MapPage/></RequireAuth>} />
+        <Route path="/scan" element={<RequireAuth><Scan/></RequireAuth>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
