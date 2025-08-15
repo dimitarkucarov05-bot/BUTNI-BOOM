@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Circle, CircleMarker } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
@@ -16,10 +16,10 @@ const markerIcon = new L.Icon({
   iconSize: [25, 41], iconAnchor: [12, 41]
 })
 
-// Център на България и нива на зуум
+// България
 const BG_CENTER: [number, number] = [42.7339, 25.4858]
-const INITIAL_ZOOM = 7          // старт – цяла България
-const TARGET_ZOOM = 16          // „50%“ по твоя замисъл: детайлно улично ниво
+const INITIAL_ZOOM = 7
+const TARGET_ZOOM = 16
 
 export default function MapPage() {
   const [codes, setCodes] = useState<Code[]>([])
@@ -28,17 +28,17 @@ export default function MapPage() {
   const [acc, setAcc] = useState<number>(0)
   const [geoMsg, setGeoMsg] = useState<string>('')
 
-  // за еднократно авто-центриране при първата валидна позиция
   const [map, setMap] = useState<L.Map | null>(null)
-  const [centeredOnce, setCenteredOnce] = useState(false)
+  const centeredOnceRef = useRef(false)
+  const pendingCenterTimer = useRef<number | null>(null)
 
-  // тикер за обратните броячи в popups
+  // тикер за обратни броячи
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(t)
   }, [])
 
-  // Зареждане на QR локациите
+  // зареждане на QR локации
   useEffect(() => {
     (async () => {
       const { data } = await supabase
@@ -49,28 +49,44 @@ export default function MapPage() {
     })()
   }, [])
 
-  // МОЯТА жива позиция (само локално – не се записва никъде)
+  // моята жива позиция (локално, не се праща никъде)
   useEffect(() => {
     if (!('geolocation' in navigator)) { setGeoMsg('Устройството няма геолокация.'); return }
+
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        setMyPos([pos.coords.latitude, pos.coords.longitude])
+        const p: [number, number] = [pos.coords.latitude, pos.coords.longitude]
+        setMyPos(p)
         setAcc(pos.coords.accuracy || 0)
         setGeoMsg('')
+
+        // центрирай веднага при първия валиден фикс
+        if (map && !centeredOnceRef.current) {
+          map.flyTo(p, TARGET_ZOOM, { animate: true })
+          centeredOnceRef.current = true
+        }
       },
       (err) => setGeoMsg(err.message || 'Грешка при геолокация.'),
       { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
     )
-    return () => navigator.geolocation.clearWatch(watchId)
-  }, [])
 
-  // Центрирай към играча САМО веднъж веднага щом имаме позиция
+    return () => navigator.geolocation.clearWatch(watchId)
+  }, [map])
+
+  // резервен център: ако първо дойде позицията, а картата още не е готова
   useEffect(() => {
-    if (map && myPos && !centeredOnce) {
-      map.setView(myPos, TARGET_ZOOM)
-      setCenteredOnce(true)
+    if (!map || !myPos || centeredOnceRef.current) return
+    // малко изчакване за да е сигурно, че map е финализиран
+    pendingCenterTimer.current = window.setTimeout(() => {
+      if (map && myPos && !centeredOnceRef.current) {
+        map.flyTo(myPos, TARGET_ZOOM, { animate: true })
+        centeredOnceRef.current = true
+      }
+    }, 150)
+    return () => {
+      if (pendingCenterTimer.current) window.clearTimeout(pendingCenterTimer.current)
     }
-  }, [map, myPos, centeredOnce])
+  }, [map, myPos])
 
   return (
     <div style={{ position:'relative' }}>
@@ -106,7 +122,7 @@ export default function MapPage() {
           )
         })}
 
-        {/* МОЯТА движеща се позиция (само за мен) */}
+        {/* Моята движеща се позиция */}
         {myPos && (
           <>
             <CircleMarker
