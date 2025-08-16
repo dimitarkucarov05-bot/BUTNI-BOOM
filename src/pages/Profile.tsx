@@ -2,56 +2,85 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
-type Choice = { label:string, value:string }
-const choices: Choice[] = [
-  { label:'Img1', value:'/avatars/a1.png' },
-  { label:'Img2', value:'/avatars/a2.png' },
-  { label:'Img3', value:'/avatars/a3.png' },
-  { label:'Emoji', value:'🧿' }, { label:'Emoji', value:'👾' },
-]
-
 export default function Profile(){
   const nav = useNavigate()
-  const [p,setP]=useState<any>(null); const [tokens,setTokens]=useState(0); const [avatar,setAvatar]=useState<string>('🧿')
+  const [loading,setLoading] = useState(true)
+  const [err,setErr] = useState('')
+  const [ok,setOk] = useState('')
 
-  useEffect(()=>{ supabase.auth.getUser().then(async r=>{
-    if(!r.data.user) return
-    const { data } = await supabase.from('profiles').select('username,tokens,avatar').eq('user_id', r.data.user.id).single()
-    setP(data); setTokens(data?.tokens ?? 0); setAvatar(data?.avatar ?? '🧿')
-  }) },[])
+  const [username,setUsername] = useState('')   // ← реалното име от БД
+  const [tokens,setTokens]     = useState(0)    // информативно
+  const [avatar,setAvatar]     = useState<string | null>(null)
 
-  const saveAvatar = async (val:string)=>{
-    setAvatar(val)
-    const me = await supabase.auth.getUser()
-    if(me.data.user){ await supabase.from('profiles').update({ avatar:val }).eq('user_id', me.data.user.id) }
+  useEffect(()=>{
+    (async ()=>{
+      setErr(''); setOk('')
+      const { data: me } = await supabase.auth.getUser()
+      if(!me.user){ nav('/auth',{replace:true}); return }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('username,tokens,avatar')
+        .eq('user_id', me.user.id)
+        .single()
+
+      if (error) { setErr(error.message) }
+      else {
+        setUsername(data?.username ?? '')
+        setTokens(data?.tokens ?? 0)
+        setAvatar(data?.avatar ?? null)
+      }
+      setLoading(false)
+    })()
+  },[nav])
+
+  const save = async ()=>{
+    setErr(''); setOk('')
+    const { data: me } = await supabase.auth.getUser()
+    if(!me.user) return
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ username, avatar })
+      .eq('user_id', me.user.id)
+
+    if (error) {
+      if (error.code === '23505' || /duplicate|unique/i.test(error.message)) {
+        setErr('Това потребителско име вече е заето. Избери друго.')
+      } else {
+        setErr(error.message)
+      }
+      return
+    }
+    setOk('Профилът е запазен.')
   }
 
-  const level = Math.max(1, Math.floor(tokens/100)+1)
-  const isImg = avatar.startsWith('/')
+  if (loading) return null
 
   return (
     <div className="container" style={{paddingTop:16}}>
       <div style={{maxWidth:520, margin:'0 auto'}}>
-        <div className="card" style={{textAlign:'center'}}>
-          {isImg ? <img src={avatar} alt="avatar" className="avatar-img"/> : <div style={{fontSize:92,lineHeight:1}}>{avatar}</div>}
-          <div className="form-row" style={{justifyContent:'center',marginTop:12}}>
-            {choices.map((c,i)=>(
-              <button key={i} onClick={()=>saveAvatar(c.value)} style={{width:'auto',padding:'8px 10px'}}>
-                {c.value.startsWith('/') ? <img src={c.value} alt={c.label} className="avatar-thumb"/> : c.value}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="card">
-          <div className="form-row">
-            <div className="tile" style={{height:56,fontSize:18}}><b>USERNAME</b>&nbsp;{p?.username ?? '—'}</div>
-            <div className="tile" style={{height:56,fontSize:18}}><b>ЛЕВЕЛ</b>&nbsp;{level}</div>
-            <div className="tile" style={{height:56,fontSize:18}}><b>ТОКЕНИ</b>&nbsp;{tokens}</div>
-          </div>
-        </div>
+          <h3 style={{marginTop:0}}>Профил</h3>
 
-        <div style={{textAlign:'right'}}><button className="link" onClick={()=>nav('/menu')}>назад</button></div>
+          <label style={{display:'block', marginBottom:6}}>Потребителско име</label>
+          <input value={username} onChange={e=>setUsername(e.target.value)} placeholder="напр. mitko20" />
+
+          <div style={{height:10}} />
+
+          <label style={{display:'block', marginBottom:6}}>Аватар (emoji или URL)</label>
+          <input value={avatar ?? ''} onChange={e=>setAvatar(e.target.value || null)} placeholder="🧿 или https://..." />
+
+          <div style={{height:10}} />
+          <div>Токени: <b>{tokens}</b></div>
+
+          <div style={{height:14}} />
+          <button className="primary" onClick={save}>Запази</button>
+          <button style={{marginLeft:8}} onClick={()=>nav('/menu')}>Назад</button>
+
+          {ok  && <div className="alert success" style={{marginTop:12}}>{ok}</div>}
+          {err && <div className="alert error"   style={{marginTop:12}}>{err}</div>}
+        </div>
       </div>
     </div>
   )
