@@ -1,100 +1,99 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
-export default function Register(){
+export default function Register() {
   const nav = useNavigate()
-  const [username,setUsername]=useState('')
-  const [password,setPassword]=useState('')
-  const [email,setEmail]=useState('')
-  const [err,setErr]=useState('')
-  const [loading,setLoading]=useState(false)
-  const [hasSession,setHasSession]=useState(false)
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [email, setEmail] = useState('')
+  const [err, setErr] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  // ако вече има сесия (напр. след предишен опит) — да знаем да не викаме пак signUp
-  useEffect(()=>{ supabase.auth.getSession().then(({data})=>setHasSession(!!data.session)) },[])
-
-  const onRegister = async (e:React.FormEvent)=>{
+  const onRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setErr('')
     setLoading(true)
 
-    // 0) Мини валидация
-    if(username.trim().length < 3){ setErr('Username трябва да е поне 3 символа.'); setLoading(false); return }
-
-    // 1) Проверка дали username е свободен (преди да правим каквото и да е)
-    try {
-      const { data: avail } = await supabase.rpc('is_username_available', { p_username: username })
-      if (avail === false) {
-        setErr('Това потребителско име е заето. Избери друго.')
-        setLoading(false)
-        return
-      }
-    } catch {
-      // ако функцията липсва — ще хванем дубликата при upsert
+    if (username.trim().length < 3) {
+      setErr('Username трябва да е поне 3 символа.')
+      setLoading(false)
+      return
     }
 
-    // 2) Ако НЯМА сесия → създаваме акаунт (email дубликат ще върне грешка тук)
-    if (!hasSession) {
-      const { data: sign, error: signErr } = await supabase.auth.signUp({ email, password })
-      if (signErr) {
-        const msg = (signErr.message || '').toLowerCase()
-        if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) {
-          setErr('Този имейл вече е регистриран. Влез от „имам профил“.')
-        } else {
-          setErr(signErr.message)
-        }
-        setLoading(false)
-        return
-      }
-      // ако email confirmations са включени, логваме директно с паролата
-      if (!sign.session) {
-        const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password })
-        if (loginErr) {
-          setErr('Провери имейла и потвърди регистрацията, след това влез от „имам профил“.')
+    try {
+      // 1) Проверка за свободен username (ако имаш функцията)
+      try {
+        const { data: avail } = await supabase.rpc('is_username_available', { p_username: username })
+        if (avail === false) {
+          setErr('Това потребителско име е заето. Избери друго.')
           setLoading(false)
           return
         }
+      } catch (_) {
+        // ако функцията липсва, ще хванем конфликта при upsert
       }
-    }
 
-    // 3) Upsert на профила (тук вече има сесия)
-    const me = await supabase.auth.getUser()
-    if (me.data.user) {
-      const { error: upErr } = await supabase
-        .from('profiles')
-        .upsert({ user_id: me.data.user.id, username }, { onConflict: 'user_id' })
-      if (upErr) {
-        // дружелюбно съобщение за дубликат
-        if (upErr.code === '23505' || /duplicate|unique/i.test(upErr.message)) {
-          setErr('Това потребителско име вече е заето. Избери друго.')
-        } else {
-          setErr(upErr.message)
+      // 2) Реален signUp – тук Supabase спира дубликат email
+      const { data: s1, error: e1 } = await supabase.auth.signUp({ email, password })
+      if (e1) {
+        const msg = (e1.message || '').toLowerCase()
+        if (msg.includes('already') || msg.includes('exists') || msg.includes('registered')) {
+          throw new Error('Този имейл вече е регистриран. Влез от „имам профил“.')
         }
-        setLoading(false)
-        return
+        throw e1
       }
-    }
 
-    setLoading(false)
-    nav('/menu', { replace: true })
+      // 3) Ако няма активна сесия след signUp (email confirm ON) – опитай вход
+      if (!s1.session) {
+        const { error: e2 } = await supabase.auth.signInWithPassword({ email, password })
+        if (e2) {
+          throw new Error('Провери имейла и потвърди регистрацията, след това влез от „имам профил“.')
+        }
+      }
+
+      // 4) Гарантирано имаме сесия – запис в profiles (upsert по user_id)
+      const { data: me } = await supabase.auth.getUser()
+      const uid = me.user?.id
+      if (!uid) throw new Error('Невалидна сесия след регистрация.')
+
+      const { data: prof, error: upErr } = await supabase
+        .from('profiles')
+        .upsert({ user_id: uid, username }, { onConflict: 'user_id' })
+        .select('user_id,username')
+        .single()
+
+      if (upErr) {
+        if (upErr.code === '23505' || /duplicate|unique/i.test(upErr.message)) {
+          throw new Error('Това потребителско име вече е заето. Избери друго.')
+        }
+        throw upErr
+      }
+
+      // 5) Успех → към менюто
+      nav('/menu', { replace: true })
+    } catch (e: any) {
+      setErr(e?.message || 'Неуспешна регистрация.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="container" style={{paddingTop:40}}>
-      <div style={{maxWidth:420, margin:'0 auto'}}>
-        <h2 style={{textAlign:'center', marginBottom:16}}>СЕГА СИ ПРАВЯ ПРОФИЛ</h2>
+    <div className="container" style={{ paddingTop: 40 }}>
+      <div style={{ maxWidth: 420, margin: '0 auto' }}>
+        <h2 style={{ textAlign: 'center', marginBottom: 16 }}>СЕГА СИ ПРАВЯ ПРОФИЛ</h2>
         <form className="card" onSubmit={onRegister}>
-          <input placeholder="username" value={username} onChange={e=>setUsername(e.target.value)} required />
-          <div style={{height:8}}/>
-          <input placeholder="парола" type="password" value={password} onChange={e=>setPassword(e.target.value)} required />
-          <div style={{height:8}}/>
-          <input placeholder="имейл" type="email" value={email} onChange={e=>setEmail(e.target.value)} required />
-          <div style={{height:12}}/>
-          <button className="primary" type="submit" disabled={loading}>{loading?'Създавам…':'Създай'}</button>
-          {err && <div className="alert error" style={{marginTop:12}}>{err}</div>}
-          <div style={{marginTop:8}}>
-            <button type="button" className="link" onClick={()=>nav('/')}>Назад</button>
+          <input placeholder="username" value={username} onChange={e => setUsername(e.target.value)} required />
+          <div style={{ height: 8 }} />
+          <input placeholder="парола" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+          <div style={{ height: 8 }} />
+          <input placeholder="имейл" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+          <div style={{ height: 12 }} />
+          <button className="primary" type="submit" disabled={loading}>{loading ? 'Създавам…' : 'Създай'}</button>
+          {err && <div className="alert error" style={{ marginTop: 12 }}>{err}</div>}
+          <div style={{ marginTop: 8 }}>
+            <button type="button" className="link" onClick={() => nav('/')}>Назад</button>
           </div>
         </form>
       </div>
